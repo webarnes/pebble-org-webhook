@@ -120,6 +120,17 @@ def test_write_daily_note_with_summary_and_proposed_tasks(tmp_path: Path) -> Non
     assert text.endswith(expected_tail)
 
 
+def test_write_daily_note_strips_fillers_from_body(tmp_path: Path) -> None:
+    daily = tmp_path / "2026-11-14.org"
+    transcript = "um, uh, the repairman came and cleaned the AC."
+    write_daily_note(daily, transcript, WHEN, TEMPLATE)
+    text = daily.read_text(encoding="utf-8")
+    assert "** The repairman came and cleaned the AC" in text
+    assert "\nThe repairman came and cleaned the AC.\n" in text
+    assert "um" not in text
+    assert "uh" not in text
+
+
 def test_bootstrap_daily_adds_id_and_date() -> None:
     text = bootstrap_daily(TEMPLATE.read_text(encoding="utf-8"), WHEN)
     assert "#+title: 2026-11-14" in text

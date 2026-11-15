@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from datetime import datetime
 from pathlib import Path
 
-from index_org_webhook.classify import note_title, task_heading
+from index_org_webhook.classify import _capitalize_first, note_title, strip_fillers, task_heading
 from index_org_webhook.org_time import org_active_timestamp, org_inactive_timestamp
 
 INBOX_HEADING = "* Inbox"
@@ -103,7 +103,7 @@ def log_entry(
 ) -> str:
     resolved_title = (title or "").strip() or note_title(transcript)
     stamp = org_inactive_timestamp(when)
-    body = transcript.strip()
+    body = _capitalize_first(strip_fillers(transcript))
     checkbox_lines = [f"- [ ] {task.strip()}" for task in proposed_tasks if task.strip()]
     checkbox_block = "\n" + "\n".join(checkbox_lines) + "\n" if checkbox_lines else ""
     return f"** {resolved_title}\n{stamp}\n\n{body}\n{checkbox_block}"
