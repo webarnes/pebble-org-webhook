@@ -182,7 +182,12 @@ def classify_transcript(
     *,
     client: httpx.Client | None = None,
 ) -> ClassificationResult:
-    if not strip_fillers(transcript) or not settings.llm_configured:
+    if not strip_fillers(transcript):
+        return fallback_classify(transcript)
+    if not settings.llm_configured:
+        logger.warning(
+            "LLM is not configured (LLM_API_KEY is empty); falling back to daily note"
+        )
         return fallback_classify(transcript)
 
     url = f"{settings.llm_base_url.strip().rstrip('/')}/chat/completions"
@@ -214,7 +219,9 @@ def classify_transcript(
         if not isinstance(content, str):
             raise TypeError("LLM message content must be a string")
         data = _extract_json_object(content)
-        return _sanitize_result(data, transcript)
+        result = _sanitize_result(data, transcript)
+        logger.info("Classified memo as %s: %s", result.kind, result.heading)
+        return result
     except httpx.HTTPStatusError as exc:
         detail = exc.response.text.strip()
         logger.warning(

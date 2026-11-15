@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+from contextlib import asynccontextmanager
+from typing import Any
+
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -20,7 +24,26 @@ from index_org_webhook.org_append import (
 from index_org_webhook.org_time import recorded_at_datetime
 from index_org_webhook.settings import Settings, get_settings
 
-app = FastAPI(title="Index Org Webhook")
+logger = logging.getLogger("index_org_webhook")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    settings = get_settings()
+    if settings.llm_configured:
+        logger.info(
+            "Index Org Webhook started. LLM enabled: model=%s base_url=%s",
+            settings.llm_model,
+            settings.llm_base_url,
+        )
+    else:
+        logger.warning(
+            "Index Org Webhook started. LLM DISABLED: LLM_API_KEY is not configured. All voice memos will fall back to daily notes."
+        )
+    yield
+
+
+app = FastAPI(title="Index Org Webhook", lifespan=lifespan)
 
 
 def _header_map(request: Request) -> dict[str, str]:
@@ -46,8 +69,13 @@ def _check_optional_auth(request: Request, settings: Settings) -> None:
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, Any]:
+    settings = get_settings()
+    return {
+        "status": "ok",
+        "llm_configured": settings.llm_configured,
+        "llm_model": settings.llm_model,
+    }
 
 
 @app.post("/webhook", response_model=None)

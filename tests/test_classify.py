@@ -25,10 +25,11 @@ WHEN = datetime(2026, 11, 14, 20, 21, tzinfo=ZoneInfo("America/Toronto"))
 def _llm_settings(**overrides: object) -> Settings:
     defaults: dict[str, object] = {
         "llm_api_key": "test-api-key",
+        "llm_model": "gemini-3.8-flash",
         "llm_timeout_seconds": 5.0,
     }
     defaults.update(overrides)
-    return Settings(_env_file=None, **defaults)  # type: ignore[arg-type]
+    return Settings(**defaults)  # type: ignore[arg-type]
 
 
 def _mock_client(content: str, *, status_code: int = 200, captured: list[httpx.Request] | None = None) -> httpx.Client:
