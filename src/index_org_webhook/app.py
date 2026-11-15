@@ -4,7 +4,7 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from index_org_webhook.classify import classify
+from index_org_webhook.classify import classify_transcript
 from index_org_webhook.deliveries import DeliveryStore
 from index_org_webhook.hmac_verify import (
     WebhookAuthError,
@@ -91,23 +91,31 @@ async def webhook(request: Request):
         str(recorded_at) if recorded_at is not None else None,
         settings.timezone,
     )
-    kind = classify(transcription)
+    result = classify_transcript(transcription, when, settings)
 
     try:
-        if kind == "task":
-            write_inbox_task(settings.todo_path, transcription, when)
+        if result.kind == "task":
+            write_inbox_task(
+                settings.todo_path,
+                transcription,
+                when,
+                heading=result.heading,
+                scheduled=result.scheduled,
+            )
         else:
             write_daily_note(
                 daily_path_for(settings.daily_dir, when),
                 transcription,
                 when,
                 settings.resolved_daily_template,
+                title=result.heading,
+                proposed_tasks=result.proposed_tasks,
             )
     except OrgWriteError as exc:
         store.forget(signed.delivery_id)
         return PlainTextResponse(str(exc), status_code=500)
 
-    return JSONResponse({"ok": True, "kind": kind})
+    return JSONResponse({"ok": True, "kind": result.kind})
 
 
 def main() -> None:

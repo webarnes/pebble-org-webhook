@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 DAY_ABBR = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -16,3 +16,20 @@ def recorded_at_datetime(recorded_at_ms: str | int | None, timezone: str) -> dat
 
 def org_inactive_timestamp(dt: datetime) -> str:
     return f"[{dt:%Y-%m-%d} {DAY_ABBR[dt.weekday()]} {dt:%H:%M}]"
+
+
+def org_active_timestamp(scheduled: str | None) -> str | None:
+    if not scheduled:
+        return None
+    cleaned = scheduled.strip()
+    if not cleaned:
+        return None
+    try:
+        if len(cleaned) == 10:
+            d = date.fromisoformat(cleaned)
+            return f"<{d:%Y-%m-%d} {DAY_ABBR[d.weekday()]}>"
+        normalized = cleaned.replace(" ", "T", 1) if " " in cleaned and "T" not in cleaned else cleaned
+        dt = datetime.fromisoformat(normalized)
+        return f"<{dt:%Y-%m-%d} {DAY_ABBR[dt.weekday()]} {dt:%H:%M}>"
+    except ValueError:
+        return None

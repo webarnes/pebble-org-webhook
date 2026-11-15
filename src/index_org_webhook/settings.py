@@ -4,6 +4,8 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEFAULT_LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -24,8 +26,20 @@ class Settings(BaseSettings):
     timezone: str = Field(default="America/Toronto", alias="ORG_TIMEZONE")
     deliveries_db: Path = Field(default=Path("deliveries.db"), alias="DELIVERIES_DB")
 
+    llm_base_url: str = Field(default=DEFAULT_LLM_BASE_URL, alias="LLM_BASE_URL")
+    llm_api_key: str = Field(default="", alias="LLM_API_KEY")
+    llm_model: str = Field(default="gemini-2.5-flash", alias="LLM_MODEL")
+    llm_timeout_seconds: float = Field(default=15.0, alias="LLM_TIMEOUT_SECONDS")
+
     bind_host: str = Field(default="127.0.0.1", alias="BIND_HOST")
     bind_port: int = Field(default=8787, alias="BIND_PORT")
+
+    @property
+    def llm_configured(self) -> bool:
+        base = self.llm_base_url.strip().rstrip("/")
+        if not base:
+            return False
+        return bool(self.llm_api_key.strip()) or base != DEFAULT_LLM_BASE_URL
 
     @property
     def todo_path(self) -> Path:

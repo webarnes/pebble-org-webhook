@@ -3,12 +3,12 @@ from __future__ import annotations
 import fcntl
 import os
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from pathlib import Path
 
 from index_org_webhook.classify import note_title, task_heading
-from index_org_webhook.org_time import org_inactive_timestamp
+from index_org_webhook.org_time import org_active_timestamp, org_inactive_timestamp
 
 INBOX_HEADING = "* Inbox"
 LOG_HEADING = "* Log"
@@ -73,22 +73,40 @@ def append_under_heading(content: str, heading: str, block: str) -> str:
     return prefix + block_text + suffix
 
 
-def inbox_entry(transcript: str, when: datetime) -> str:
-    heading = task_heading(transcript)
+def inbox_entry(
+    transcript: str,
+    when: datetime,
+    *,
+    heading: str | None = None,
+    scheduled: str | None = None,
+) -> str:
+    resolved_heading = (heading or "").strip() or task_heading(transcript)
     stamp = org_inactive_timestamp(when)
+    scheduled_stamp = org_active_timestamp(scheduled)
+    scheduled_line = f"SCHEDULED: {scheduled_stamp}\n" if scheduled_stamp else ""
+    raw_single_line = " ".join(transcript.strip().splitlines())
     return (
-        f"** TODO {heading}\n"
+        f"** TODO {resolved_heading}\n"
+        f"{scheduled_line}"
         f":LOGBOOK:\n"
-        f"- Task created on {stamp} from Index 01\n"
+        f'- Task created on {stamp} from voice recording: "{raw_single_line}"\n'
         f":END:\n"
     )
 
 
-def log_entry(transcript: str, when: datetime) -> str:
-    title = note_title(transcript)
+def log_entry(
+    transcript: str,
+    when: datetime,
+    *,
+    title: str | None = None,
+    proposed_tasks: Sequence[str] = (),
+) -> str:
+    resolved_title = (title or "").strip() or note_title(transcript)
     stamp = org_inactive_timestamp(when)
     body = transcript.strip()
-    return f"** {title}\n{stamp}\n\n{body}\n"
+    checkbox_lines = [f"- [ ] {task.strip()}" for task in proposed_tasks if task.strip()]
+    checkbox_block = "\n" + "\n".join(checkbox_lines) + "\n" if checkbox_lines else ""
+    return f"** {resolved_title}\n{stamp}\n\n{body}\n{checkbox_block}"
 
 
 def bootstrap_daily(template_text: str, when: datetime) -> str:
@@ -104,8 +122,15 @@ def bootstrap_daily(template_text: str, when: datetime) -> str:
     return text
 
 
-def write_inbox_task(todo_path: Path, transcript: str, when: datetime) -> None:
-    block = inbox_entry(transcript, when)
+def write_inbox_task(
+    todo_path: Path,
+    transcript: str,
+    when: datetime,
+    *,
+    heading: str | None = None,
+    scheduled: str | None = None,
+) -> None:
+    block = inbox_entry(transcript, when, heading=heading, scheduled=scheduled)
 
     def transform(content: str) -> str:
         headings = {line.rstrip() for line in content.splitlines()}
@@ -122,8 +147,11 @@ def write_daily_note(
     transcript: str,
     when: datetime,
     template_path: Path,
+    *,
+    title: str | None = None,
+    proposed_tasks: Sequence[str] = (),
 ) -> None:
-    block = log_entry(transcript, when)
+    block = log_entry(transcript, when, title=title, proposed_tasks=proposed_tasks)
 
     def transform(content: str) -> str:
         if not content:

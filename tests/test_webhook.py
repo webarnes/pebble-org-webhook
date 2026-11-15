@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from index_org_webhook.app import app
@@ -56,6 +59,28 @@ def _signed_post(
     return client.post("/webhook", content=body, headers=headers)
 
 
+def _patch_llm_response(monkeypatch: pytest.MonkeyPatch, payload: dict[str, object] | Exception) -> None:
+    monkeypatch.setenv("LLM_API_KEY", "test-llm-key")
+    get_settings.cache_clear()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if isinstance(payload, Exception):
+            raise payload
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": json.dumps(payload)}}]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.Client
+
+    def fake_client(*args: object, **kwargs: object) -> httpx.Client:
+        kwargs["transport"] = transport
+        return real_client(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("index_org_webhook.classify.httpx.Client", fake_client)
+
+
 def test_health() -> None:
     with TestClient(app) as client:
         response = client.get("/health")
@@ -63,12 +88,22 @@ def test_health() -> None:
     assert response.json()["status"] == "ok"
 
 
-def test_task_goes_to_inbox(org_env: Path) -> None:
+def test_scheduled_task_goes_to_inbox(org_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_llm_response(
+        monkeypatch,
+        {
+            "kind": "task",
+            "heading": "Call the dentist",
+            "scheduled": "2026-11-16 09:00",
+            "proposed_tasks": [],
+        },
+    )
+    transcript = "Remind me to call the dentist Monday at 9am"
     with TestClient(app) as client:
         response = _signed_post(
             client,
             {
-                "transcription": "call the dentist",
+                "transcription": transcript,
                 "recordedAt": "1763169660000",
                 "client": "ring",
             },
@@ -76,17 +111,28 @@ def test_task_goes_to_inbox(org_env: Path) -> None:
     assert response.status_code == 200
     assert response.json()["kind"] == "task"
     todo = (org_env / "todo.org").read_text(encoding="utf-8")
-    assert "** TODO Call the dentist" in todo
+    assert "** TODO Call the dentist\nSCHEDULED: <2026-11-16 Mon 09:00>\n:LOGBOOK:\n" in todo
+    assert f'from voice recording: "{transcript}"' in todo
     inbox_at = todo.index("* Inbox")
     assert todo.index("** TODO Call the dentist") > inbox_at
 
 
-def test_note_goes_to_daily(org_env: Path) -> None:
+def test_note_with_proposed_task_goes_to_daily(org_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_llm_response(
+        monkeypatch,
+        {
+            "kind": "note",
+            "heading": "AC cleaning and filter check",
+            "scheduled": None,
+            "proposed_tasks": ["Buy replacement AC filter"],
+        },
+    )
+    transcript = "The repairman came and cleaned the AC, and said the filter is getting old."
     with TestClient(app) as client:
         response = _signed_post(
             client,
             {
-                "transcription": "The repairman came and cleaned the AC.",
+                "transcription": transcript,
                 "recordedAt": "1763169660000",
                 "client": "ring",
             },
@@ -98,11 +144,61 @@ def test_note_goes_to_daily(org_env: Path) -> None:
     assert len(dailies) == 1
     text = dailies[0].read_text(encoding="utf-8")
     assert "* Log" in text
-    assert "The repairman came and cleaned the AC." in text
+    assert "** AC cleaning and filter check" in text
+    assert f"{transcript}\n\n- [ ] Buy replacement AC filter\n" in text
 
 
-def test_duplicate_delivery_is_idempotent(org_env: Path) -> None:
-    fields = {"transcription": "buy milk", "recordedAt": "1763169660000", "client": "ring"}
+def test_unconfigured_or_failing_llm_falls_back_to_daily_note(
+    org_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transcript = "Remember to pick up the dry cleaning. It closes at five."
+    with TestClient(app) as client:
+        unconfigured_resp = _signed_post(
+            client,
+            {
+                "transcription": transcript,
+                "recordedAt": "1763169660000",
+                "client": "ring",
+            },
+            delivery="delivery-unconfigured",
+        )
+    assert unconfigured_resp.status_code == 200
+    assert unconfigured_resp.json()["kind"] == "note"
+
+    _patch_llm_response(monkeypatch, httpx.ConnectError("connection refused"))
+    with TestClient(app) as client:
+        failing_resp = _signed_post(
+            client,
+            {
+                "transcription": "Another voice note while offline.",
+                "recordedAt": "1763169660000",
+                "client": "ring",
+            },
+            delivery="delivery-offline",
+        )
+    assert failing_resp.status_code == 200
+    assert failing_resp.json()["kind"] == "note"
+
+    dailies = list((org_env / "roam" / "daily").glob("*.org"))
+    assert len(dailies) == 1
+    text = dailies[0].read_text(encoding="utf-8")
+    assert "** Remember to pick up the dry cleaning" in text
+    assert transcript in text
+    assert "** Another voice note while offline" in text
+
+
+def test_duplicate_delivery_is_idempotent(org_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_llm_response(
+        monkeypatch,
+        {
+            "kind": "task",
+            "heading": "Buy milk",
+            "scheduled": None,
+            "proposed_tasks": [],
+        },
+    )
+    fields = {"transcription": "todo buy milk", "recordedAt": "1763169660000", "client": "ring"}
     with TestClient(app) as client:
         first = _signed_post(client, fields, delivery="same-id")
         second = _signed_post(client, fields, delivery="same-id")

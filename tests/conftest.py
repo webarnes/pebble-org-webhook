@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from index_org_webhook.settings import get_settings
+from index_org_webhook.settings import DEFAULT_LLM_BASE_URL, get_settings
 
 FIXTURE_TEMPLATE = Path(__file__).parent / "fixtures" / "roam.dailies.default.txt"
 
@@ -27,6 +27,8 @@ def org_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("ORG_DIRECTORY", str(org))
     monkeypatch.setenv("DELIVERIES_DB", str(tmp_path / "deliveries.db"))
     monkeypatch.setenv("ORG_TIMEZONE", "America/Toronto")
+    monkeypatch.setenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL)
+    monkeypatch.setenv("LLM_API_KEY", "")
     get_settings.cache_clear()
     yield org
     get_settings.cache_clear()

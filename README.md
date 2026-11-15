@@ -9,12 +9,20 @@ The Index app POSTs `multipart/form-data` to an HTTPS URL. This service is meant
 
 ## How a memo is classified
 
-After stripping filler (`um`, `uh`, …), a memo is a **task** if it starts with a cue or an imperative:
+Transcripts are classified by an LLM via an OpenAI-compatible `/chat/completions` endpoint (defaulting to Google Gemini; switchable to local models such as Ollama via `LLM_BASE_URL` and `LLM_MODEL`):
 
-- Cues: `todo`, `to do`, `task`, `remind me`, `don't forget`, `do not forget`, `I need to`, `I have to`, `please remember`
-- Imperatives: `call`, `buy`, `email`, `schedule`, `book`, `pay`, `pick up`, `follow up`
+- **Clear reminders** become `** TODO` items under `* Inbox` in `todo.org` (newest first), with a `SCHEDULED:` line when a clear date or time is present and the timestamped raw transcript recorded in `:LOGBOOK:`.
+- **Notes** go under `* Log` in today’s org-roam daily file with a succinct summary heading, the exact transcript text, and any implied action items appended as `- [ ]` checkboxes for evening review.
+- **Fallback**: If the LLM is not configured, times out, or fails, the memo is saved as a daily note with a heuristic heading so no recording is lost.
 
-Anything else is a **note**.
+### LLM configuration
+
+Set these environment variables in `.env` (or `/etc/index-org-webhook.env`):
+
+- `LLM_BASE_URL`: OpenAI-compatible base URL (default: `https://generativelanguage.googleapis.com/v1beta/openai`)
+- `LLM_API_KEY`: API key for the provider (optional for unauthenticated local endpoints)
+- `LLM_MODEL`: Model name (default: `gemini-2.5-flash`)
+- `LLM_TIMEOUT_SECONDS`: HTTP request timeout in seconds (default: `15.0`)
 
 ## Local development
 
