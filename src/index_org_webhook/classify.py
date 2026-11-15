@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
@@ -38,6 +39,13 @@ _CUE_RE = re.compile(
 _FILLER_RE = re.compile(r"^(?:um+|uh+|er+|ah+|erm)[,\s]+", re.IGNORECASE)
 _FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```$", re.DOTALL | re.IGNORECASE)
 _CHECKBOX_PREFIX_RE = re.compile(r"^(?:-\s*\[\s*[xX ]?\s*\]\s*|\[\s*[xX ]?\s*\]\s*|-\s+)")
+_HASHTAG_RE = re.compile(r"(?<!\w)#([A-Za-z][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)*)")
+_TRAILING_HASHTAGS_RE = re.compile(
+    r"(?:\s+#[A-Za-z][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)*)+\s*$"
+)
+_ORG_TAG_SUFFIX_RE = re.compile(
+    r"(?:\s+:[A-Za-z0-9_@#%-]+(?::[A-Za-z0-9_@#%-]+)*:)+\s*$"
+)
 
 _SYSTEM_PROMPT = """You classify short voice-memo transcripts for a personal Org-mode workflow.
 
@@ -49,12 +57,12 @@ Return ONLY a JSON object with exactly these keys:
 
 Classification rules:
 1. Classify as "task" ONLY if the transcript is a clear, explicit reminder, to-do, or command to do something (e.g., "remind me to...", "todo...", "don't forget to...", "call the dentist tomorrow at 9").
-   - "heading": concise imperative task title with filler words and reminder cues ("remind me to", "todo", "don't forget") stripped, first letter capitalized.
+   - "heading": concise imperative task title with filler words and reminder cues ("remind me to", "todo", "don't forget") stripped, first letter capitalized, and no hashtags or tags.
    - "scheduled": if the reminder states a CLEAR date or date and time, resolve it relative to the recording timestamp and format as "YYYY-MM-DD" (date only) or "YYYY-MM-DD HH:MM" (24-hour date and time). If there is NO clear date or time, "scheduled" MUST be null.
    - "proposed_tasks": MUST be [].
 
 2. Otherwise classify as "note" (observations, events, ideas, reflections, journal entries, or ambiguous memos that are not clear explicit reminders).
-   - "heading": succinct summary of the note (3-8 words, max 72 characters, no trailing period).
+   - "heading": succinct summary of the note (3-8 words, max 72 characters, no trailing period, no hashtags or tags).
    - "scheduled": MUST be null.
    - "proposed_tasks": if the note mentions or implies any potential follow-up action items, list each as a concise imperative task string without "- [ ]" prefixes; otherwise [].
 """
@@ -81,16 +89,54 @@ def strip_fillers(text: str) -> str:
         cleaned = next_cleaned.strip()
 
 
+def extract_hashtags(text: str) -> tuple[str, ...]:
+    """Extract lowercase, deduplicated hashtag names in order of appearance."""
+    return tuple(dict.fromkeys(m.group(1).lower() for m in _HASHTAG_RE.finditer(text)))
+
+
+def strip_hashtags(text: str) -> str:
+    """Remove trailing hashtags/Org tags and strip `#` from inline hashtags."""
+    cleaned = _ORG_TAG_SUFFIX_RE.sub("", text).strip()
+    without_trailing = _TRAILING_HASHTAGS_RE.sub("", cleaned).strip()
+    base = without_trailing if without_trailing else cleaned
+    without_inline = _HASHTAG_RE.sub(r"\1", base)
+    return " ".join(without_inline.split()).strip()
+
+
+def apply_org_tags(heading: str, tags: Sequence[str]) -> str:
+    """Attach lowercase Org-mode tags (`:tag1:tag2:`) to the end of a heading."""
+    base = _ORG_TAG_SUFFIX_RE.sub("", heading).strip()
+    normalized = tuple(
+        dict.fromkeys(
+            cleaned
+            for tag in tags
+            if (cleaned := tag.strip().lstrip("#").lower())
+        )
+    )
+    if not normalized:
+        return base
+    tag_suffix = f":{':'.join(normalized)}:"
+    return f"{base} {tag_suffix}" if base else tag_suffix
+
+
+def short_note_heading(transcript: str) -> str:
+    """Build a short-note heading with hashtags converted to Org-mode tags."""
+    cleaned = strip_hashtags(strip_fillers(transcript))
+    return apply_org_tags(_capitalize_first(cleaned), extract_hashtags(transcript))
+
+
 def task_heading(transcript: str) -> str:
     cleaned = strip_fillers(transcript)
     stripped = _CUE_RE.sub("", cleaned, count=1).strip()
     stripped = re.sub(r"^to\s+", "", stripped, flags=re.IGNORECASE).strip() or cleaned
+    stripped = strip_hashtags(stripped)
     return _capitalize_first(stripped)
 
 
 def note_title(transcript: str, *, max_len: int = 72) -> str:
     cleaned = strip_fillers(transcript)
     first = re.split(r"[.!?\n]", cleaned, maxsplit=1)[0].strip()
+    first = strip_hashtags(first)
     if ", " in first and len(first) > max_len:
         first = first.split(",", 1)[0].strip()
     if len(first) > max_len:
@@ -102,7 +148,10 @@ def note_title(transcript: str, *, max_len: int = 72) -> str:
 def fallback_classify(transcript: str) -> ClassificationResult:
     cleaned = _capitalize_first(strip_fillers(transcript))
     single_line = " ".join(cleaned.split())
-    heading = single_line if len(single_line) < 70 else note_title(transcript)
+    if len(single_line) < 70:
+        heading = short_note_heading(transcript)
+    else:
+        heading = apply_org_tags(note_title(transcript), extract_hashtags(transcript))
     return ClassificationResult(
         kind="note",
         heading=heading,
@@ -137,9 +186,9 @@ def _extract_json_object(raw_content: str) -> dict[str, Any]:
 
 def _sanitize_heading(raw_heading: Any, kind: Kind, transcript: str) -> str:
     if isinstance(raw_heading, str):
-        collapsed = " ".join(raw_heading.split()).strip()
-        if collapsed:
-            return _capitalize_first(collapsed)
+        cleaned = strip_hashtags(raw_heading)
+        if cleaned:
+            return _capitalize_first(cleaned)
     return task_heading(transcript) if kind == "task" else note_title(transcript)
 
 
@@ -170,12 +219,17 @@ def _sanitize_result(data: dict[str, Any], transcript: str) -> ClassificationRes
     kind = data.get("kind")
     if kind not in ("task", "note"):
         raise ValueError(f"Unexpected classification kind: {kind!r}")
+    tags = extract_hashtags(transcript)
     heading = _sanitize_heading(data.get("heading"), kind, transcript)
     if kind == "note":
         cleaned = _capitalize_first(strip_fillers(transcript))
         single_line = " ".join(cleaned.split())
         if len(single_line) < 70:
-            heading = single_line
+            heading = short_note_heading(transcript)
+        else:
+            heading = apply_org_tags(heading, tags)
+    else:
+        heading = apply_org_tags(heading, tags)
     return ClassificationResult(
         kind=kind,
         heading=heading,

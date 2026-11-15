@@ -7,7 +7,16 @@ from collections.abc import Callable, Sequence
 from datetime import datetime
 from pathlib import Path
 
-from index_org_webhook.classify import _capitalize_first, note_title, strip_fillers, task_heading
+from index_org_webhook.classify import (
+    _capitalize_first,
+    apply_org_tags,
+    extract_hashtags,
+    note_title,
+    short_note_heading,
+    strip_fillers,
+    strip_hashtags,
+    task_heading,
+)
 from index_org_webhook.org_time import org_active_timestamp, org_inactive_timestamp
 
 INBOX_HEADING = "* Inbox"
@@ -81,6 +90,10 @@ def inbox_entry(
     scheduled: str | None = None,
 ) -> str:
     resolved_heading = (heading or "").strip() or task_heading(transcript)
+    resolved_heading = apply_org_tags(
+        _capitalize_first(strip_hashtags(resolved_heading)),
+        extract_hashtags(transcript),
+    )
     stamp = org_inactive_timestamp(when)
     scheduled_stamp = org_active_timestamp(scheduled)
     scheduled_line = f"SCHEDULED: {scheduled_stamp}\n" if scheduled_stamp else ""
@@ -108,9 +121,14 @@ def log_entry(
     checkbox_block = ("\n" + "\n".join(checkbox_lines) + "\n") if checkbox_lines else ""
 
     if len(single_line_cleaned) < 70:
-        return f"** {single_line_cleaned}\n{stamp}\n{checkbox_block}"
+        short_heading = short_note_heading(transcript)
+        return f"** {short_heading}\n{stamp}\n{checkbox_block}"
 
     resolved_title = (title or "").strip() or note_title(transcript)
+    resolved_title = apply_org_tags(
+        _capitalize_first(strip_hashtags(resolved_title)),
+        extract_hashtags(transcript),
+    )
     body = cleaned
     return f"** {resolved_title}\n{stamp}\n\n{body}\n{checkbox_block}"
 

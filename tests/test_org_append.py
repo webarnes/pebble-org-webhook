@@ -9,7 +9,9 @@ from index_org_webhook.org_append import (
     LOG_HEADING,
     append_under_heading,
     bootstrap_daily,
+    inbox_entry,
     insert_after_heading,
+    log_entry,
     write_daily_note,
     write_inbox_task,
 )
@@ -164,3 +166,69 @@ def test_bootstrap_daily_adds_id_and_date() -> None:
     assert "#+title: 2026-11-14" in text
     assert "%<" not in text
     assert ":ID:" in text
+
+
+def test_write_daily_note_short_notes_with_hashtags(tmp_path: Path) -> None:
+    daily = tmp_path / "2026-11-14.org"
+    write_daily_note(daily, "The moon is out #astronomy", WHEN, TEMPLATE)
+    write_daily_note(daily, "The #moon is out", WHEN, TEMPLATE)
+    text = daily.read_text(encoding="utf-8")
+    stamp = org_inactive_timestamp(WHEN)
+    assert f"** The moon is out :astronomy:\n{stamp}\n" in text
+    assert f"** The moon is out :moon:\n{stamp}\n" in text
+
+
+def test_write_daily_note_long_note_with_hashtags(tmp_path: Path) -> None:
+    daily = tmp_path / "2026-11-14.org"
+    transcript = (
+        "Spent twenty minutes outside watching the #Moon rise above the trees "
+        "before the clouds moved in. #Astronomy #NightSky"
+    )
+    write_daily_note(
+        daily,
+        transcript,
+        WHEN,
+        TEMPLATE,
+        title="Moonrise watching #astronomy",
+    )
+    text = daily.read_text(encoding="utf-8")
+    stamp = org_inactive_timestamp(WHEN)
+    expected_tail = (
+        "** Moonrise watching :moon:astronomy:nightsky:\n"
+        f"{stamp}\n\n"
+        f"{transcript}\n"
+    )
+    assert text.endswith(expected_tail)
+
+
+def test_log_entry_and_inbox_entry_with_hashtags() -> None:
+    stamp = org_inactive_timestamp(WHEN)
+    note_block = log_entry("The #Moon is out #Astronomy", WHEN)
+    assert note_block == f"** The Moon is out :moon:astronomy:\n{stamp}\n"
+
+    task_block = inbox_entry(
+        "remind me to buy #Filters #Home",
+        WHEN,
+        heading="Buy filters #Home",
+        scheduled="2026-11-16",
+    )
+    assert task_block == (
+        "** TODO Buy filters :filters:home:\n"
+        "SCHEDULED: <2026-11-16 Mon>\n"
+        ":LOGBOOK:\n"
+        f'- Task created on {stamp} from voice recording: "remind me to buy #Filters #Home"\n'
+        ":END:\n"
+    )
+
+
+def test_write_inbox_task_converts_hashtags_to_org_tags(tmp_path: Path) -> None:
+    todo = tmp_path / "todo.org"
+    todo.write_text("* Inbox\n** DONE Old\n", encoding="utf-8")
+    write_inbox_task(
+        todo,
+        "todo call the #Dentist #Health",
+        WHEN,
+        heading="Call the dentist #Health",
+    )
+    text = todo.read_text(encoding="utf-8")
+    assert "** TODO Call the dentist :dentist:health:\n" in text

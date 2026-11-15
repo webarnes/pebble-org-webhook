@@ -10,6 +10,7 @@ import pytest
 
 from index_org_webhook import cli
 from index_org_webhook.classify import (
+    _SYSTEM_PROMPT,
     ClassificationResult,
     classify_transcript,
     fallback_classify,
@@ -379,3 +380,108 @@ def test_cli_handles_empty_input(
     monkeypatch.setattr("builtins.input", lambda prompt: "   ")
     assert cli.main([]) == 0
     assert "No transcript provided." in capsys.readouterr().out
+
+
+def test_system_prompt_forbids_tags_in_headings() -> None:
+    assert "no hashtags or tags" in _SYSTEM_PROMPT
+
+
+def test_classify_short_note_converts_hashtags_to_lowercase_org_tags() -> None:
+    client = _mock_client(
+        json.dumps(
+            {
+                "kind": "note",
+                "heading": "Ignored short summary #astronomy",
+                "scheduled": None,
+                "proposed_tasks": [],
+            }
+        )
+    )
+
+    trailing = classify_transcript("The moon is out #astronomy", WHEN, _llm_settings(), client=client)
+    assert trailing == ClassificationResult(
+        kind="note",
+        heading="The moon is out :astronomy:",
+        scheduled=None,
+        proposed_tasks=(),
+    )
+
+    inline = classify_transcript("The #moon is out", WHEN, _llm_settings(), client=client)
+    assert inline == ClassificationResult(
+        kind="note",
+        heading="The moon is out :moon:",
+        scheduled=None,
+        proposed_tasks=(),
+    )
+
+    mixed = classify_transcript(
+        "The #Moon is out #Astronomy #NightSky",
+        WHEN,
+        _llm_settings(),
+        client=client,
+    )
+    assert mixed == ClassificationResult(
+        kind="note",
+        heading="The Moon is out :moon:astronomy:nightsky:",
+        scheduled=None,
+        proposed_tasks=(),
+    )
+
+
+def test_classify_long_note_extracts_hashtags_and_strips_from_llm_heading() -> None:
+    client = _mock_client(
+        json.dumps(
+            {
+                "kind": "note",
+                "heading": "Backyard #stargazing session #Astronomy :extra:",
+                "scheduled": None,
+                "proposed_tasks": [],
+            }
+        )
+    )
+    transcript = (
+        "Spent an hour in the backyard watching the #Moon rise through thin clouds "
+        "and testing my binoculars #Astronomy #NightSky"
+    )
+    result = classify_transcript(transcript, WHEN, _llm_settings(), client=client)
+    assert result == ClassificationResult(
+        kind="note",
+        heading="Backyard stargazing session :moon:astronomy:nightsky:",
+        scheduled=None,
+        proposed_tasks=(),
+    )
+
+
+def test_classify_task_extracts_hashtags_and_strips_from_llm_heading() -> None:
+    client = _mock_client(
+        json.dumps(
+            {
+                "kind": "task",
+                "heading": "buy a #telescope eyepiece #Astronomy",
+                "scheduled": "2026-11-16",
+                "proposed_tasks": [],
+            }
+        )
+    )
+    transcript = "Remind me to buy a new #Telescope eyepiece on Monday #Astronomy #Shopping"
+    result = classify_transcript(transcript, WHEN, _llm_settings(), client=client)
+    assert result == ClassificationResult(
+        kind="task",
+        heading="Buy a telescope eyepiece :telescope:astronomy:shopping:",
+        scheduled="2026-11-16",
+        proposed_tasks=(),
+    )
+
+
+def test_fallback_classify_converts_hashtags_for_short_and_long_notes() -> None:
+    short = fallback_classify("The #moon is out #Astronomy")
+    assert short.heading == "The moon is out :moon:astronomy:"
+
+    long_transcript = (
+        "Walked along the lakefront before dawn while the #Moon was still high "
+        "in the clear sky. #Astronomy #Morning"
+    )
+    long_result = fallback_classify(long_transcript)
+    assert long_result.heading == (
+        "Walked along the lakefront before dawn while the Moon was still high… :moon:astronomy:morning:"
+    )
