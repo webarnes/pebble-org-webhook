@@ -1,0 +1,18 @@
+[Unit]
+Description=Pebble Index 01 Org webhook
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=webarnes
+Group=webarnes
+WorkingDirectory=/home/webarnes/Projects/index-org-webhook
+EnvironmentFile=/etc/index-org-webhook.env
+ExecStart=/home/webarnes/Projects/index-org-webhook/.venv/bin/uvicorn index_org_webhook.app:app --host 127.0.0.1 --port 8787
+Restart=on-failure
+RestartSec=3
+
+# Keep the listener off the public internet; Tailscale Serve fronts HTTPS.
+[Install]
+WantedBy=multi-user.target

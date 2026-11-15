@@ -1,0 +1,21 @@
+#+title: %<%Y-%m-%d>
+#+filetags: :daily:
+
+* Goals for the Day
+
+- [ ]
+
+* Habits
+
+** Organization
+
+- [ ] Evening I
+- [ ] Evening II
+
+** Bible Study
+
+- [ ] Bible in a Year
+- [ ] Morning (Lauds)
+- [ ] Evening (Vespers/Rosary)
+
+* Log
