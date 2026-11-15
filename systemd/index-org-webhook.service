@@ -5,11 +5,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=webarnes
-Group=webarnes
-WorkingDirectory=/home/webarnes/Projects/index-org-webhook
+User=USER
+Group=GROUP
+WorkingDirectory=/home/USER/DIR/index-org-webhook
 EnvironmentFile=/etc/index-org-webhook.env
-ExecStart=/home/webarnes/Projects/index-org-webhook/.venv/bin/uvicorn index_org_webhook.app:app --host 127.0.0.1 --port 8787
+ExecStart=/home/USER/DIR/index-org-webhook/.venv/bin/uvicorn index_org_webhook.app:app --host 127.0.0.1 --port 8787
 Restart=on-failure
 RestartSec=3
 

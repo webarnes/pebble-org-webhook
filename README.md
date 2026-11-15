@@ -74,7 +74,7 @@ curl -sS -X POST http://127.0.0.1:8787/webhook \
    python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
    ```
 
-   Set `ORG_DIRECTORY` to the synced Org path (for example `/home/webarnes/Documents/Org`).
+   Set `ORG_DIRECTORY` to the synced Org path (for example `/home/USER/DIR/Org`).
 4. Install and start the unit:
 
    ```bash
