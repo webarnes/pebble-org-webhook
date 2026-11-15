@@ -93,6 +93,17 @@ curl -sS -X POST http://127.0.0.1:8787/webhook \
    The phone URL is `https://<server>.<tailnet>.ts.net/webhook`. Confirm with `tailscale serve status`.
 6. Install Tailscale on the phone so it is on the same tailnet.
 
+## Updating the home server
+
+To update the code, dependencies, and restart the service in one step:
+
+```bash
+cd /path/to/index-org-webhook
+./update.sh
+```
+
+This runs `git pull`, ensures dependencies are up-to-date in editable mode via `.venv/bin/pip install -e .`, and restarts `index-org-webhook.service`.
+
 ## Index 01 settings
 
 In Index 01 Settings → Webhook, for each gesture you want (Hold & talk and/or Double click & hold):
