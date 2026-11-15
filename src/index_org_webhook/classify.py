@@ -100,9 +100,12 @@ def note_title(transcript: str, *, max_len: int = 72) -> str:
 
 
 def fallback_classify(transcript: str) -> ClassificationResult:
+    cleaned = _capitalize_first(strip_fillers(transcript))
+    single_line = " ".join(cleaned.split())
+    heading = single_line if len(single_line) < 70 else note_title(transcript)
     return ClassificationResult(
         kind="note",
-        heading=note_title(transcript),
+        heading=heading,
         scheduled=None,
         proposed_tasks=(),
     )
@@ -167,9 +170,15 @@ def _sanitize_result(data: dict[str, Any], transcript: str) -> ClassificationRes
     kind = data.get("kind")
     if kind not in ("task", "note"):
         raise ValueError(f"Unexpected classification kind: {kind!r}")
+    heading = _sanitize_heading(data.get("heading"), kind, transcript)
+    if kind == "note":
+        cleaned = _capitalize_first(strip_fillers(transcript))
+        single_line = " ".join(cleaned.split())
+        if len(single_line) < 70:
+            heading = single_line
     return ClassificationResult(
         kind=kind,
-        heading=_sanitize_heading(data.get("heading"), kind, transcript),
+        heading=heading,
         scheduled=_sanitize_scheduled(data.get("scheduled"), kind),
         proposed_tasks=_sanitize_proposed_tasks(data.get("proposed_tasks"), kind),
     )

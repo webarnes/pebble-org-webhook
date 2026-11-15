@@ -131,8 +131,9 @@ def test_classify_note_without_and_with_proposed_tasks() -> None:
             }
         )
     )
+    long_transcript = "Walked Arrowhead Trail this morning with the dog. It was very brisk and sunny out."
     plain = classify_transcript(
-        "Walked Arrowhead Trail this morning. It was brisk.",
+        long_transcript,
         WHEN,
         _llm_settings(),
         client=plain_note_client,
@@ -140,6 +141,21 @@ def test_classify_note_without_and_with_proposed_tasks() -> None:
     assert plain == ClassificationResult(
         kind="note",
         heading="Arrowhead Trail morning walk",
+        scheduled=None,
+        proposed_tasks=(),
+    )
+
+    # < 70 chars: heading is the transcript itself
+    short_transcript = "Walked Arrowhead Trail this morning."
+    short_result = classify_transcript(
+        short_transcript,
+        WHEN,
+        _llm_settings(),
+        client=plain_note_client,
+    )
+    assert short_result == ClassificationResult(
+        kind="note",
+        heading="Walked Arrowhead Trail this morning.",
         scheduled=None,
         proposed_tasks=(),
     )
@@ -160,7 +176,7 @@ def test_classify_note_without_and_with_proposed_tasks() -> None:
         )
     )
     with_actions = classify_transcript(
-        "The repairman cleaned the AC and mentioned the filter looks worn out.",
+        "The repairman cleaned the AC today and mentioned the filter looks completely worn out.",
         WHEN,
         _llm_settings(),
         client=action_note_client,
@@ -188,7 +204,8 @@ def test_classify_handles_code_fences_and_local_endpoint_without_key() -> None:
     )
     assert local_settings.llm_configured is True
 
-    result = classify_transcript("Thoughts about Sunday readings", WHEN, local_settings, client=client)
+    transcript = "Thoughts about Sunday readings from our church service earlier this morning."
+    result = classify_transcript(transcript, WHEN, local_settings, client=client)
     assert result == ClassificationResult(kind="note", heading="Sunday readings reflection")
     assert "Authorization" not in captured[0].headers
     assert str(captured[0].url) == "http://127.0.0.1:11434/v1/chat/completions"
@@ -308,7 +325,8 @@ def test_cli_prints_note_with_proposed_tasks_without_writing_files(
         },
     )
 
-    exit_code = cli.main(["The repairman cleaned the AC and said the filter is worn."])
+    long_transcript = "The repairman cleaned the AC today and mentioned that the air filter is worn."
+    exit_code = cli.main([long_transcript])
     get_settings.cache_clear()
 
     assert exit_code == 0
@@ -318,8 +336,40 @@ def test_cli_prints_note_with_proposed_tasks_without_writing_files(
     assert "scheduled: (none)" in out
     assert "proposed_tasks: ['Buy replacement AC filter']" in out
     assert "** AC filter wear noted" in out
+    assert long_transcript in out
     assert "- [ ] Buy replacement AC filter" in out
     assert list(org_dir.rglob("*")) == []
+
+
+def test_cli_prints_short_note_without_body(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    org_dir = tmp_path / "Org"
+    org_dir.mkdir()
+    _patch_cli_llm(
+        monkeypatch,
+        org_dir,
+        {
+            "kind": "note",
+            "heading": "Ignored short summary",
+            "scheduled": None,
+            "proposed_tasks": [],
+        },
+    )
+
+    exit_code = cli.main(["Sunny afternoon walk around the block."])
+    get_settings.cache_clear()
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "kind: note" in out
+    assert "heading: Sunny afternoon walk around the block." in out
+    assert "** Sunny afternoon walk around the block." in out
+    # Verify no body repetition below timestamp
+    lines = [line.strip() for line in out.splitlines() if line.strip()]
+    assert sum(1 for line in lines if "Sunny afternoon walk around the block." in line) == 2
 
 
 def test_cli_handles_empty_input(

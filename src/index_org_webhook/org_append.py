@@ -101,11 +101,17 @@ def log_entry(
     title: str | None = None,
     proposed_tasks: Sequence[str] = (),
 ) -> str:
-    resolved_title = (title or "").strip() or note_title(transcript)
+    cleaned = _capitalize_first(strip_fillers(transcript))
+    single_line_cleaned = " ".join(cleaned.split())
     stamp = org_inactive_timestamp(when)
-    body = _capitalize_first(strip_fillers(transcript))
     checkbox_lines = [f"- [ ] {task.strip()}" for task in proposed_tasks if task.strip()]
-    checkbox_block = "\n" + "\n".join(checkbox_lines) + "\n" if checkbox_lines else ""
+    checkbox_block = ("\n" + "\n".join(checkbox_lines) + "\n") if checkbox_lines else ""
+
+    if len(single_line_cleaned) < 70:
+        return f"** {single_line_cleaned}\n{stamp}\n{checkbox_block}"
+
+    resolved_title = (title or "").strip() or note_title(transcript)
+    body = cleaned
     return f"** {resolved_title}\n{stamp}\n\n{body}\n{checkbox_block}"
 
 

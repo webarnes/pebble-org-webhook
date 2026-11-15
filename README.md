@@ -12,7 +12,7 @@ The Index app POSTs `multipart/form-data` to an HTTPS URL. This service is meant
 Transcripts are classified by an LLM via an OpenAI-compatible `/chat/completions` endpoint (defaulting to Google Gemini; switchable to local models such as Ollama via `LLM_BASE_URL` and `LLM_MODEL`):
 
 - **Clear reminders** become `** TODO` items under `* Inbox` in `todo.org` (newest first), with a `SCHEDULED:` line when a clear date or time is present and the timestamped raw transcript recorded in `:LOGBOOK:`.
-- **Notes** go under `* Log` in today’s org-roam daily file with a succinct summary heading, the exact transcript text, and any implied action items appended as `- [ ]` checkboxes for evening review.
+- **Notes** go under `* Log` in today’s org-roam daily file. If a note is less than 70 characters, its heading is the transcript itself with no body; longer notes use a succinct summary heading and preserve the transcript in the body. Any implied action items are appended as `- [ ]` checkboxes for evening review.
 - **Fallback**: If the LLM is not configured, times out, or fails, the memo is saved as a daily note with a heuristic heading so no recording is lost.
 
 ### LLM configuration

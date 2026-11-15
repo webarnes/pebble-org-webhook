@@ -92,13 +92,39 @@ def test_write_daily_creates_from_template(tmp_path: Path) -> None:
     assert ":ID:" in text
     assert "#+title: 2026-11-14" in text
     assert "* Log" in text
-    assert "** The repairman came and cleaned the AC" in text
-    assert "The repairman came and cleaned the AC." in text
+    assert "** The repairman came and cleaned the AC." in text
+    # < 70 chars: heading is transcript; no body
+    stamp = org_inactive_timestamp(WHEN)
+    assert f"** The repairman came and cleaned the AC.\n{stamp}\n" in text
+
+
+def test_write_daily_note_under_70_chars_with_proposed_task(tmp_path: Path) -> None:
+    daily = tmp_path / "2026-11-14.org"
+    write_daily_note(
+        daily,
+        "Walked Arrowhead Trail this morning.",
+        WHEN,
+        TEMPLATE,
+        title="Ignored summary",
+        proposed_tasks=("Buy new hiking socks",),
+    )
+    text = daily.read_text(encoding="utf-8")
+    stamp = org_inactive_timestamp(WHEN)
+    expected = (
+        "* Log\n\n"
+        "** Walked Arrowhead Trail this morning.\n"
+        f"{stamp}\n\n"
+        "- [ ] Buy new hiking socks\n"
+    )
+    assert text.endswith(expected)
 
 
 def test_write_daily_note_with_summary_and_proposed_tasks(tmp_path: Path) -> None:
     daily = tmp_path / "2026-11-14.org"
-    transcript = "  The repairman cleaned the AC, and we probably need a new filter soon.  "
+    transcript = (
+        "  The repairman cleaned the AC today, and mentioned we probably need "
+        "a new filter soon before winter sets in.  "
+    )
     write_daily_note(
         daily,
         transcript,
@@ -113,7 +139,7 @@ def test_write_daily_note_with_summary_and_proposed_tasks(tmp_path: Path) -> Non
         "* Log\n\n"
         "** AC cleaning and filter check\n"
         f"{stamp}\n\n"
-        "The repairman cleaned the AC, and we probably need a new filter soon.\n\n"
+        "The repairman cleaned the AC today, and mentioned we probably need a new filter soon before winter sets in.\n\n"
         "- [ ] Buy replacement AC filter\n"
         "- [ ] Check filter size\n"
     )
@@ -122,13 +148,15 @@ def test_write_daily_note_with_summary_and_proposed_tasks(tmp_path: Path) -> Non
 
 def test_write_daily_note_strips_fillers_from_body(tmp_path: Path) -> None:
     daily = tmp_path / "2026-11-14.org"
-    transcript = "um, uh, the repairman came and cleaned the AC."
+    transcript = (
+        "um, uh, the repairman came and cleaned the AC today and said the "
+        "filter needs to be changed next week."
+    )
     write_daily_note(daily, transcript, WHEN, TEMPLATE)
     text = daily.read_text(encoding="utf-8")
-    assert "** The repairman came and cleaned the AC" in text
-    assert "\nThe repairman came and cleaned the AC.\n" in text
     assert "um" not in text
     assert "uh" not in text
+    assert "The repairman came and cleaned the AC today and said the filter needs to be changed next week." in text
 
 
 def test_bootstrap_daily_adds_id_and_date() -> None:
