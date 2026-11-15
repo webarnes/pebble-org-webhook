@@ -215,6 +215,14 @@ def classify_transcript(
             raise TypeError("LLM message content must be a string")
         data = _extract_json_object(content)
         return _sanitize_result(data, transcript)
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text.strip()
+        logger.warning(
+            "LLM classification failed; falling back to daily note: %s%s",
+            exc,
+            f" | response: {detail}" if detail else "",
+        )
+        return fallback_classify(transcript)
     except (httpx.HTTPError, json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError) as exc:
         logger.warning("LLM classification failed; falling back to daily note: %s", exc)
         return fallback_classify(transcript)

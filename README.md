@@ -21,7 +21,7 @@ Set these environment variables in `.env` (or `/etc/index-org-webhook.env`):
 
 - `LLM_BASE_URL`: OpenAI-compatible base URL (default: `https://generativelanguage.googleapis.com/v1beta/openai`)
 - `LLM_API_KEY`: API key for the provider (optional for unauthenticated local endpoints)
-- `LLM_MODEL`: Model name (default: `gemini-2.5-flash`)
+- `LLM_MODEL`: Model name (default: `gemini-flash-latest`)
 - `LLM_TIMEOUT_SECONDS`: HTTP request timeout in seconds (default: `15.0`)
 
 ### Testing LLM classification locally

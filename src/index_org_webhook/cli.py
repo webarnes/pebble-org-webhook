@@ -57,6 +57,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     result = classify_transcript(transcript, when, settings)
     preview = _render_preview(transcript, when, result)
 
+    print(f"model: {settings.llm_model}")
     print(f"kind: {result.kind}")
     print(f"heading: {result.heading}")
     print(f"scheduled: {result.scheduled or '(none)'}")

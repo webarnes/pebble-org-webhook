@@ -25,7 +25,6 @@ WHEN = datetime(2026, 11, 14, 20, 21, tzinfo=ZoneInfo("America/Toronto"))
 def _llm_settings(**overrides: object) -> Settings:
     defaults: dict[str, object] = {
         "llm_api_key": "test-api-key",
-        "llm_model": "gemini-2.5-flash",
         "llm_timeout_seconds": 5.0,
     }
     defaults.update(overrides)
@@ -82,7 +81,7 @@ def test_classify_unscheduled_task() -> None:
     assert str(req.url) == "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
     assert req.headers["Authorization"] == "Bearer test-api-key"
     body = json.loads(req.content)
-    assert body["model"] == "gemini-2.5-flash"
+    assert body["model"] == "gemini-3.8-flash"
     assert "2026-11-14 (Sat) 20:21" in body["messages"][1]["content"]
     assert "Remind me to call the dentist" in body["messages"][1]["content"]
 
@@ -209,7 +208,9 @@ def test_classify_sanitizes_invalid_scheduled_and_empty_heading() -> None:
     assert result == ClassificationResult(kind="task", heading="Call the dentist", scheduled=None)
 
 
-def test_classify_fallbacks_on_unconfigured_http_timeout_and_bad_json() -> None:
+def test_classify_fallbacks_on_unconfigured_http_timeout_and_bad_json(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     transcript = "The repairman came and cleaned the AC. Everything works now."
     expected = fallback_classify(transcript)
 
@@ -217,8 +218,10 @@ def test_classify_fallbacks_on_unconfigured_http_timeout_and_bad_json() -> None:
     assert unconfigured.llm_configured is False
     assert classify_transcript(transcript, WHEN, unconfigured) == expected
 
-    http_error_client = _mock_client("{}", status_code=502)
-    assert classify_transcript(transcript, WHEN, _llm_settings(), client=http_error_client) == expected
+    http_error_client = _mock_client("bad gateway detail", status_code=502)
+    with caplog.at_level("WARNING"):
+        assert classify_transcript(transcript, WHEN, _llm_settings(), client=http_error_client) == expected
+    assert "bad gateway detail" in caplog.text
 
     def timeout_handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("timed out", request=request)
