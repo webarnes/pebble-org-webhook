@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import httpx
+import pytest
 
+from index_org_webhook import cli
 from index_org_webhook.classify import (
     ClassificationResult,
     classify_transcript,
@@ -14,7 +17,7 @@ from index_org_webhook.classify import (
     strip_fillers,
     task_heading,
 )
-from index_org_webhook.settings import Settings
+from index_org_webhook.settings import Settings, get_settings
 
 WHEN = datetime(2026, 11, 14, 20, 21, tzinfo=ZoneInfo("America/Toronto"))
 
@@ -228,3 +231,97 @@ def test_classify_fallbacks_on_unconfigured_http_timeout_and_bad_json() -> None:
 
     bad_kind_client = _mock_client(json.dumps({"kind": "reminder", "heading": "Hi"}))
     assert classify_transcript(transcript, WHEN, _llm_settings(), client=bad_kind_client) == expected
+
+
+def _patch_cli_llm(monkeypatch: pytest.MonkeyPatch, org_dir: Path, payload: dict[str, object]) -> None:
+    monkeypatch.setenv("ORG_DIRECTORY", str(org_dir))
+    monkeypatch.setenv("LLM_API_KEY", "test-api-key")
+    get_settings.cache_clear()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": json.dumps(payload)}}]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.Client
+
+    def fake_client(*args: object, **kwargs: object) -> httpx.Client:
+        kwargs["transport"] = transport
+        return real_client(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("index_org_webhook.classify.httpx.Client", fake_client)
+
+
+def test_cli_prompts_and_prints_task_without_writing_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    org_dir = tmp_path / "Org"
+    org_dir.mkdir()
+    _patch_cli_llm(
+        monkeypatch,
+        org_dir,
+        {
+            "kind": "task",
+            "heading": "Call the dentist",
+            "scheduled": "2026-11-16 09:00",
+            "proposed_tasks": [],
+        },
+    )
+    monkeypatch.setattr("builtins.input", lambda prompt: "Remind me to call the dentist Monday at 9am")
+
+    exit_code = cli.main([])
+    get_settings.cache_clear()
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "kind: task" in out
+    assert "heading: Call the dentist" in out
+    assert "scheduled: 2026-11-16 09:00" in out
+    assert "** TODO Call the dentist" in out
+    assert "SCHEDULED: <2026-11-16 Mon 09:00>" in out
+    assert list(org_dir.rglob("*")) == []
+
+
+def test_cli_prints_note_with_proposed_tasks_without_writing_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    org_dir = tmp_path / "Org"
+    org_dir.mkdir()
+    _patch_cli_llm(
+        monkeypatch,
+        org_dir,
+        {
+            "kind": "note",
+            "heading": "AC filter wear noted",
+            "scheduled": None,
+            "proposed_tasks": ["Buy replacement AC filter"],
+        },
+    )
+
+    exit_code = cli.main(["The repairman cleaned the AC and said the filter is worn."])
+    get_settings.cache_clear()
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "kind: note" in out
+    assert "heading: AC filter wear noted" in out
+    assert "scheduled: (none)" in out
+    assert "proposed_tasks: ['Buy replacement AC filter']" in out
+    assert "** AC filter wear noted" in out
+    assert "- [ ] Buy replacement AC filter" in out
+    assert list(org_dir.rglob("*")) == []
+
+
+def test_cli_handles_empty_input(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr("builtins.input", lambda prompt: "   ")
+    assert cli.main([]) == 0
+    assert "No transcript provided." in capsys.readouterr().out

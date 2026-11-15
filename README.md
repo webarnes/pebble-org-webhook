@@ -24,6 +24,22 @@ Set these environment variables in `.env` (or `/etc/index-org-webhook.env`):
 - `LLM_MODEL`: Model name (default: `gemini-2.5-flash`)
 - `LLM_TIMEOUT_SECONDS`: HTTP request timeout in seconds (default: `15.0`)
 
+### Testing LLM classification locally
+
+To interactively test classification and preview the Org output without modifying any files:
+
+```bash
+.venv/bin/python -m index_org_webhook.cli
+```
+
+Or pass a transcript directly:
+
+```bash
+.venv/bin/python -m index_org_webhook.cli "Remind me to call the dentist Monday at 9am"
+```
+
+(If installed in an active virtualenv, `index-org-classify` is also available.)
+
 ## Local development
 
 ```bash

@@ -20,6 +20,7 @@ dev = [
 
 [project.scripts]
 index-org-webhook = "index_org_webhook.app:main"
+index-org-classify = "index_org_webhook.cli:main"
 
 [build-system]
 requires = ["hatchling"]
