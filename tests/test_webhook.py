@@ -112,7 +112,7 @@ def test_scheduled_task_goes_to_inbox(org_env: Path, monkeypatch: pytest.MonkeyP
     assert response.json()["kind"] == "task"
     todo = (org_env / "todo.org").read_text(encoding="utf-8")
     assert "** TODO Call the dentist\nSCHEDULED: <2026-11-16 Mon 09:00>\n:LOGBOOK:\n" in todo
-    assert f'from voice recording: "{transcript}"' in todo
+    assert f'from Index 01: "{transcript}"' in todo
     inbox_at = todo.index("* Inbox")
     assert todo.index("** TODO Call the dentist") > inbox_at
 

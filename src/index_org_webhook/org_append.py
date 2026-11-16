@@ -102,7 +102,7 @@ def inbox_entry(
         f"** TODO {resolved_heading}\n"
         f"{scheduled_line}"
         f":LOGBOOK:\n"
-        f'- Task created on {stamp} from voice recording: "{raw_single_line}"\n'
+        f'- Task created on {stamp} from Index 01: "{raw_single_line}"\n'
         f":END:\n"
     )
 

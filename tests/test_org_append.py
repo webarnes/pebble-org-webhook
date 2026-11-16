@@ -58,7 +58,7 @@ def test_write_inbox_task_file(tmp_path: Path) -> None:
     stamp = org_inactive_timestamp(WHEN)
     assert text.index("* Inbox") < text.index("** TODO Call the dentist") < text.index("** DONE Old")
     assert "SCHEDULED:" not in text
-    assert f'- Task created on {stamp} from voice recording: "todo call the dentist"' in text
+    assert f'- Task created on {stamp} from Index 01: "todo call the dentist"' in text
     assert ":LOGBOOK:" in text
 
 
@@ -79,7 +79,7 @@ def test_write_inbox_task_file_scheduled_and_custom_heading(tmp_path: Path) -> N
         "** TODO Call the dentist\n"
         "SCHEDULED: <2026-11-16 Mon 09:00>\n"
         ":LOGBOOK:\n"
-        f'- Task created on {stamp} from voice recording: "remind me to call the dentist on Monday at 9am"\n'
+        f'- Task created on {stamp} from Index 01: "remind me to call the dentist on Monday at 9am"\n'
         ":END:\n"
         "** DONE Old\n"
     )
@@ -216,7 +216,7 @@ def test_log_entry_and_inbox_entry_with_hashtags() -> None:
         "** TODO Buy filters :filters:home:\n"
         "SCHEDULED: <2026-11-16 Mon>\n"
         ":LOGBOOK:\n"
-        f'- Task created on {stamp} from voice recording: "remind me to buy #Filters #Home"\n'
+        f'- Task created on {stamp} from Index 01: "remind me to buy #Filters #Home"\n'
         ":END:\n"
     )
 
